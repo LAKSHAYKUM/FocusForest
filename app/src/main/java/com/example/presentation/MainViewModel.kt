@@ -339,16 +339,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPlacementCalibration(onComplete: () -> Unit) {
-        _uiState.value = _uiState.value.copy(sessionState = SessionState.CALIBRATING)
+        _uiState.value = _uiState.value.copy(
+            sessionState = SessionState.CALIBRATING,
+            selectedMode = FocusMode.PLACEMENT
+        )
         movementManager.startCalibration(
             durationMs = 2500L,
             onCalibrationComplete = {
                 onComplete()
             },
             onError = { _ ->
-                // Fallback to standard if sensors fail
-                _uiState.value = _uiState.value.copy(selectedMode = FocusMode.STANDARD)
-                onComplete()
+                // Do NOT fallback to Standard mode. Keep user in CALIBRATING state
+                // so they can read the guidance and tap Retry.
+                _uiState.value = _uiState.value.copy(
+                    sessionState = SessionState.CALIBRATING,
+                    selectedMode = FocusMode.PLACEMENT
+                )
             }
         )
     }
