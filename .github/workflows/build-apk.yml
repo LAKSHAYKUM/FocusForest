@@ -1,45 +1,58 @@
 name: Build Android APK
 
 on:
-  push:
-    branches: [ "**" ]
-  pull_request:
-    branches: [ "**" ]
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
-    name: Build Debug APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
           distribution: 'temurin'
-          cache: gradle
+          java-version: '17'
 
-      - name: Grant execute permission for gradlew
+      - name: Verify project structure
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x gradlew
+          if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
+            echo "Error: Android project root not found."
+            exit 1
+          fi
+          if [ ! -d "app" ]; then
+            echo "Error: Application module 'app' not found."
+            exit 1
+          fi
+          if [ ! -f "gradlew" ]; then
+            echo "Error: Gradle wrapper 'gradlew' not found."
+            exit 1
           fi
 
-      - name: Assemble Debug APK with Gradle
+      - name: Generate debug keystore
         run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
-          fi
+          # app/build.gradle.kts requires debug.keystore at rootDir
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Upload Debug APK Artifact
+      - name: Clear caches
+        run: |
+          rm -rf .gradle
+          rm -rf app/build
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: focusforest-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+          name: android-app-debug-apk
+          path: app/build/outputs/apk/debug/**/*.apk
+          if-no-files-found: error
