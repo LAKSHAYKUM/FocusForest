@@ -1,0 +1,6 @@
+{
+  "name": "FocusForest",
+  "description": "Grow a flourishing forest through focused work with phone placement and motion detection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
