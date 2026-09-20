@@ -23,7 +23,8 @@ interface FocusRepository {
         plannedMinutes: Int,
         actualSeconds: Long,
         mode: FocusMode,
-        movementEvents: Int
+        movementEvents: Int,
+        treeSpecies: String = "PINE"
     ): Pair<FocusSession, Tree>
 
     suspend fun recordInterruptedSession(
@@ -32,7 +33,8 @@ interface FocusRepository {
         plannedMinutes: Int,
         actualSeconds: Long,
         mode: FocusMode,
-        movementEvents: Int
+        movementEvents: Int,
+        treeSpecies: String = "PINE"
     ): FocusSession
 
     suspend fun clearAllData()

@@ -53,6 +53,7 @@ fun FocusActiveView(
     isStrictLockActive: Boolean = false,
     reducedMotion: Boolean = false,
     treeStyle: String = "PINE",
+    activeTreeId: String = "tree_default",
     dayNightMode: String = "SYSTEM",
     onPauseClicked: () -> Unit,
     onResumeClicked: () -> Unit,
@@ -222,6 +223,7 @@ fun FocusActiveView(
                     isNight = isNight,
                     reducedMotion = reducedMotion,
                     seedVariation = seedVar,
+                    treeId = activeTreeId,
                     modifier = Modifier.fillMaxSize()
                 )
             }

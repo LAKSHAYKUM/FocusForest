@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +63,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.model.FocusMode
 import com.example.domain.model.MovementState
@@ -134,6 +140,7 @@ fun FocusScreen(
                     isStrictLockActive = uiState.isStrictLockActive,
                     reducedMotion = uiState.reducedMotion,
                     treeStyle = uiState.treeStyle,
+                    activeTreeId = viewModel.currentSessionTreeId.collectAsStateWithLifecycle().value,
                     dayNightMode = uiState.dayNightMode,
                     onPauseClicked = { viewModel.pauseSession() },
                     onResumeClicked = { viewModel.resumeSession() },
@@ -170,8 +177,10 @@ fun FocusScreen(
             else -> {
                 // Idle Configuration View
                 FocusConfigurationView(
+                    viewModel = viewModel,
                     selectedDuration = uiState.selectedDurationMinutes,
                     selectedMode = uiState.selectedMode,
+                    activeTreeId = viewModel.activeTreeId.value,
                     onSelectDuration = { viewModel.selectDuration(it) },
                     onSelectMode = { viewModel.selectMode(it) },
                     onStartClicked = { initiateStart() }
@@ -270,15 +279,37 @@ fun FocusScreen(
 
 @Composable
 private fun FocusConfigurationView(
+    viewModel: MainViewModel,
     selectedDuration: Int,
     selectedMode: FocusMode,
+    activeTreeId: String = "tree_default",
     onSelectDuration: (Int) -> Unit,
     onSelectMode: (FocusMode) -> Unit,
     onStartClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val durationOptions = listOf(15, 25, 45, 60)
+    val durationPresets = listOf(15, 25, 45, 60)
+    var isCustomSelected by remember { mutableStateOf(!durationPresets.contains(selectedDuration)) }
+    var customHours by remember { mutableStateOf(if (!durationPresets.contains(selectedDuration)) (selectedDuration / 60).toString() else "0") }
+    var customMinutes by remember { mutableStateOf(if (!durationPresets.contains(selectedDuration)) (selectedDuration % 60).toString() else "30") }
+
+    val parsedHours = customHours.toIntOrNull() ?: 0
+    val parsedMinutes = customMinutes.toIntOrNull() ?: 0
+    val totalCustomMinutes = parsedHours * 60 + parsedMinutes
+
+    val customValidationErrorMessage = when {
+        customHours.isBlank() && customMinutes.isBlank() -> "Enter hours or minutes"
+        customHours.toIntOrNull() == null || customMinutes.toIntOrNull() == null -> "Invalid numbers entered"
+        parsedHours < 0 || parsedMinutes < 0 -> "Values cannot be negative"
+        parsedHours > 12 -> "Maximum focus duration is 12 hours"
+        parsedMinutes > 59 && parsedHours > 0 -> "Minutes must be between 0 and 59"
+        totalCustomMinutes == 0 -> "Duration must be at least 1 minute"
+        totalCustomMinutes > 720 -> "Duration cannot exceed 12 hours (720 min)"
+        else -> null
+    }
+
     val stage = TreeStage.fromDuration(selectedDuration)
+    val activeTree = remember(activeTreeId) { com.example.domain.tree.TreeCatalog.findById(activeTreeId) }
 
     LazyColumn(
         modifier = modifier
@@ -400,17 +431,22 @@ private fun FocusConfigurationView(
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                durationOptions.forEach { minutes ->
-                    val isSelected = selectedDuration == minutes
+                durationPresets.forEach { minutes ->
+                    val isSelected = !isCustomSelected && selectedDuration == minutes
                     FilterChip(
                         selected = isSelected,
-                        onClick = { onSelectDuration(minutes) },
+                        onClick = {
+                            isCustomSelected = false
+                            onSelectDuration(minutes)
+                        },
                         label = {
                             Text(
-                                text = "${minutes}m",
+                                text = "${minutes} MIN",
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         },
@@ -419,14 +455,152 @@ private fun FocusConfigurationView(
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("duration_chip_${minutes}m")
+                        modifier = Modifier.testTag("duration_chip_${minutes}m")
                     )
                 }
+
+                // CUSTOM chip alongside existing presets
+                FilterChip(
+                    selected = isCustomSelected,
+                    onClick = {
+                        isCustomSelected = true
+                        if (totalCustomMinutes in 1..720) {
+                            onSelectDuration(totalCustomMinutes)
+                        }
+                    },
+                    label = {
+                        Text(
+                            text = "CUSTOM",
+                            fontWeight = if (isCustomSelected) FontWeight.Bold else FontWeight.SemiBold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("duration_chip_custom")
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Custom Duration Selector Card
+        if (isCustomSelected) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("custom_duration_card")
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "CUSTOM FOCUS",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            // Hours input
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Hours",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = customHours,
+                                    onValueChange = { newVal ->
+                                        if (newVal.all { it.isDigit() } && newVal.length <= 2) {
+                                            customHours = newVal
+                                            val h = newVal.toIntOrNull() ?: 0
+                                            val m = customMinutes.toIntOrNull() ?: 0
+                                            val total = h * 60 + m
+                                            if (total in 1..720) {
+                                                onSelectDuration(total)
+                                            }
+                                        }
+                                    },
+                                    placeholder = { Text("0") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("custom_hours_input")
+                                )
+                            }
+
+                            // Minutes input
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Minutes",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = customMinutes,
+                                    onValueChange = { newVal ->
+                                        if (newVal.all { it.isDigit() } && newVal.length <= 3) {
+                                            customMinutes = newVal
+                                            val h = customHours.toIntOrNull() ?: 0
+                                            val m = newVal.toIntOrNull() ?: 0
+                                            val total = h * 60 + m
+                                            if (total in 1..720) {
+                                                onSelectDuration(total)
+                                            }
+                                        }
+                                    },
+                                    placeholder = { Text("30") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("custom_minutes_input")
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Estimated Focus display / validation message
+                        val estimatedText = when {
+                            customValidationErrorMessage != null -> customValidationErrorMessage
+                            totalCustomMinutes >= 60 && totalCustomMinutes % 60 == 0 ->
+                                "Estimated Focus: ${totalCustomMinutes / 60} ${if (totalCustomMinutes / 60 == 1) "hour" else "hours"}"
+                            totalCustomMinutes >= 60 ->
+                                "Estimated Focus: ${totalCustomMinutes / 60} hr ${totalCustomMinutes % 60} min (${totalCustomMinutes} minutes)"
+                            totalCustomMinutes > 0 ->
+                                "Estimated Focus: $totalCustomMinutes minutes"
+                            else -> "Enter focus duration (1 min to 12 hours)"
+                        }
+
+                        Text(
+                            text = estimatedText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (customValidationErrorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
 
         // Growth Reward Forecast Card
@@ -448,13 +622,13 @@ private fun FocusConfigurationView(
                     Box(
                         modifier = Modifier
                             .size(54.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            .background(activeTree.palette.primaryFoliage.copy(alpha = 0.2f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Eco,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = activeTree.palette.primaryFoliage,
                             modifier = Modifier.size(30.dp)
                         )
                     }
@@ -463,7 +637,7 @@ private fun FocusConfigurationView(
 
                     Column {
                         Text(
-                            text = "Grows a ${stage.title}",
+                            text = "Grows: ${activeTree.name} (${stage.title})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -482,8 +656,10 @@ private fun FocusConfigurationView(
 
         // Begin Focus Button
         item {
+            val isCustomValid = !isCustomSelected || (customValidationErrorMessage == null && totalCustomMinutes in 1..720)
             Button(
                 onClick = onStartClicked,
+                enabled = isCustomValid,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -505,6 +681,13 @@ private fun FocusConfigurationView(
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            com.example.presentation.ads.InlineBannerAd(
+                viewModel = viewModel,
+                placement = com.example.ads.AdPlacement.FOREST_BOTTOM
+            )
         }
     }
 }

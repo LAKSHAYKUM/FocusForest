@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -48,6 +49,7 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showTreesCatalog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     val navItems = listOf(
         NavItem("Forest", Icons.Default.Eco, "nav_forest"),
@@ -63,13 +65,25 @@ fun MainScreen(
             uiState.sessionState != SessionState.INTERRUPTED
 
     // Intercept back button during focus sessions to avoid accidental abandonment
-    BackHandler(enabled = isFocusing) {
-        viewModel.requestEndSessionConfirmation()
+    BackHandler(enabled = isFocusing || showTreesCatalog) {
+        if (showTreesCatalog) {
+            showTreesCatalog = false
+        } else {
+            viewModel.requestEndSessionConfirmation()
+        }
     }
 
     if (!uiState.onboardingCompleted) {
         OnboardingScreen(
             onFinished = { viewModel.completeOnboarding() }
+        )
+        return
+    }
+
+    if (showTreesCatalog) {
+        com.example.presentation.tree.TreeCollectionScreen(
+            viewModel = viewModel,
+            onBack = { showTreesCatalog = false }
         )
         return
     }
@@ -139,6 +153,9 @@ fun MainScreen(
                                     }
                                 }
                             }
+                        },
+                        onTreesCatalogClicked = {
+                            showTreesCatalog = true
                         }
                     )
                     1 -> FocusScreen(viewModel = viewModel)

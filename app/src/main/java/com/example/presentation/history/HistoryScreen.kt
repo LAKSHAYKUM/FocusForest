@@ -164,6 +164,15 @@ fun HistoryScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
         }
+
+        // Inline Banner Ad Placement
+        item {
+            com.example.presentation.ads.InlineBannerAd(
+                viewModel = viewModel,
+                placement = com.example.ads.AdPlacement.HISTORY_FOOTER,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
     }
 
     // Detail Dialog

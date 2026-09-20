@@ -85,7 +85,8 @@ class FocusRepositoryImpl(
         plannedMinutes: Int,
         actualSeconds: Long,
         mode: FocusMode,
-        movementEvents: Int
+        movementEvents: Int,
+        treeSpecies: String
     ): Pair<FocusSession, Tree> = withContext(Dispatchers.IO) {
         val treeStage = TreeStage.fromDuration(plannedMinutes)
         val earnedXP = treeStage.xpValue + if (mode == FocusMode.PLACEMENT) 30 else 0
@@ -106,11 +107,15 @@ class FocusRepositoryImpl(
         val sessionId = focusDao.insertSession(sessionEntity)
 
         // 2. Insert Tree
-        val species = when (treeStage) {
-            TreeStage.SEED, TreeStage.SPROUT -> "PINE"
-            TreeStage.YOUNG_TREE -> "OAK"
-            TreeStage.MATURE_TREE -> "CEDAR"
-            TreeStage.LARGE_TREE -> "ANCIENT"
+        val species = if (treeSpecies.isNotBlank() && treeSpecies != "PINE" && treeSpecies != "tree_default") {
+            treeSpecies
+        } else {
+            when (treeStage) {
+                TreeStage.SEED, TreeStage.SPROUT -> "PINE"
+                TreeStage.YOUNG_TREE -> "OAK"
+                TreeStage.MATURE_TREE -> "CEDAR"
+                TreeStage.LARGE_TREE -> "ANCIENT"
+            }
         }
         val treeEntity = TreeEntity(
             growthLevel = treeStage.level,
@@ -135,7 +140,8 @@ class FocusRepositoryImpl(
         plannedMinutes: Int,
         actualSeconds: Long,
         mode: FocusMode,
-        movementEvents: Int
+        movementEvents: Int,
+        treeSpecies: String
     ): FocusSession = withContext(Dispatchers.IO) {
         val actualMinutes = (actualSeconds / 60).toInt()
         val earnedXP = (actualMinutes * 2).coerceAtLeast(5)

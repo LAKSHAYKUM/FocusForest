@@ -44,7 +44,7 @@ class TimerEngine(
             currentState == SessionState.MOVED_WARNING || currentState == SessionState.RESTORED) {
             return
         }
-        val safeMinutes = durationMinutes.coerceIn(1, 180)
+        val safeMinutes = durationMinutes.coerceIn(1, 720)
         plannedDurationMs = safeMinutes * 60 * 1000L
         val seconds = safeMinutes * 60L
         _snapshot.value = TimerSnapshot(

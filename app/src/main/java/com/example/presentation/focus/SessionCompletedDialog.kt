@@ -85,18 +85,22 @@ fun SessionCompletedDialog(
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val treeCatalogItem = remember(result.tree.species) {
+                    com.example.domain.tree.TreeCatalog.findBySpeciesOrId(result.tree.species)
+                }
+
                 // Blooming Tree Graphic
                 Box(
                     modifier = Modifier
                         .size(110.dp)
                         .scale(treeScale)
-                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                        .background(treeCatalogItem.palette.primaryFoliage.copy(alpha = 0.2f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Eco,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = treeCatalogItem.palette.primaryFoliage,
                         modifier = Modifier.size(64.dp)
                     )
                 }
@@ -116,9 +120,9 @@ fun SessionCompletedDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Your forest grew a new ${result.treeStage.title.lowercase()}!",
+                    text = "Your forest grew a new ${treeCatalogItem.name} ${result.treeStage.title.lowercase()}!",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = treeCatalogItem.palette.primaryFoliage,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )

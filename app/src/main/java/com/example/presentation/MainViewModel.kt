@@ -71,6 +71,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val movementManager = app.movementManager
     val lockManager = app.lockManager
     val soundManager = app.soundManager
+    val authManager = app.authManager
+    val adManager = app.adManager
+
+    val authState = authManager.authState
+    val adMetrics = adManager.metrics
+    val adsEnabled = adManager.adsEnabledFlow
+    val personalizedConsent = adManager.personalizedConsentFlow
+
+    private val unlockCodeService: com.example.domain.tree.UnlockCodeService =
+        com.example.domain.tree.ProductionUnlockCodeService()
+
+    val ownedTrees: androidx.compose.runtime.State<Set<String>> =
+        dataStore.ownedTrees.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            setOf("tree_default")
+        ).let { flow ->
+            // Expose as State or StateFlow
+            flow.stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                setOf("tree_default")
+            )
+        }.let { sf ->
+            androidx.compose.runtime.mutableStateOf(setOf("tree_default")).also { mutableState ->
+                viewModelScope.launch {
+                    sf.collectLatest { mutableState.value = it }
+                }
+            }
+        }
+
+    val activeTreeId: androidx.compose.runtime.State<String> =
+        androidx.compose.runtime.mutableStateOf("tree_default").also { mutableState ->
+            viewModelScope.launch {
+                dataStore.activeTreeId.collectLatest { mutableState.value = it }
+            }
+        }
+
+    private val _currentSessionTreeId = MutableStateFlow("tree_default")
+    val currentSessionTreeId: StateFlow<String> = _currentSessionTreeId.asStateFlow()
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -314,8 +354,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectDuration(minutes: Int) {
         if (isSessionActive()) return
-        _uiState.value = _uiState.value.copy(selectedDurationMinutes = minutes)
-        timerEngine.configure(minutes)
+        val safeMinutes = minutes.coerceIn(1, 720)
+        _uiState.value = _uiState.value.copy(selectedDurationMinutes = safeMinutes)
+        timerEngine.configure(safeMinutes)
     }
 
     fun selectMode(mode: FocusMode) {
@@ -339,6 +380,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPlacementCalibration(onComplete: () -> Unit) {
+        // Freeze current active tree for this entire session
+        _currentSessionTreeId.value = activeTreeId.value
+
         _uiState.value = _uiState.value.copy(
             sessionState = SessionState.CALIBRATING,
             selectedMode = FocusMode.PLACEMENT
@@ -360,6 +404,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startFocusSession() {
+        // Freeze current active tree for this entire session
+        _currentSessionTreeId.value = activeTreeId.value
+
         val duration = _uiState.value.selectedDurationMinutes
         val isPlacement = _uiState.value.selectedMode == FocusMode.PLACEMENT
 
@@ -434,7 +481,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     plannedMinutes = plannedMinutes,
                     actualSeconds = actualSeconds,
                     mode = mode,
-                    movementEvents = movements
+                    movementEvents = movements,
+                    treeSpecies = _currentSessionTreeId.value
                 )
             } finally {
                 timerEngine.reset()
@@ -462,7 +510,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 plannedMinutes = plannedMinutes,
                 actualSeconds = actualSeconds,
                 mode = mode,
-                movementEvents = movements
+                movementEvents = movements,
+                treeSpecies = _currentSessionTreeId.value
             )
             _uiState.value = _uiState.value.copy(
                 completedResult = SessionCompletedResult(
@@ -570,6 +619,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearAllData()
             timerEngine.reset()
             movementManager.reset()
+        }
+    }
+
+    fun signInWithGoogle(context: android.content.Context, serverClientId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authManager.signInWithGoogle(context, serverClientId)
+            if (result.isSuccess) {
+                onSuccess()
+            }
+        }
+    }
+
+    fun signInAnonymously(onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authManager.signInAnonymously()
+            if (result.isSuccess) {
+                onSuccess()
+            }
+        }
+    }
+
+    fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authManager.signInWithEmail(email, pass)
+            if (result.isSuccess) {
+                onSuccess()
+            }
+        }
+    }
+
+    fun signUpWithEmail(email: String, pass: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authManager.signUpWithEmail(email, pass)
+            if (result.isSuccess) {
+                onSuccess()
+            }
+        }
+    }
+
+    fun signOut() {
+        authManager.signOut()
+    }
+
+    fun clearAuthError() {
+        authManager.clearError()
+    }
+
+    fun updateAdsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            adManager.setAdsEnabled(enabled)
+        }
+    }
+
+    fun updatePersonalizedConsent(enabled: Boolean) {
+        viewModelScope.launch {
+            adManager.setPersonalizedConsent(enabled)
+        }
+    }
+
+    fun resetAdMetrics() {
+        viewModelScope.launch {
+            adManager.resetMetrics()
+        }
+    }
+
+    fun selectActiveTree(treeId: String) {
+        viewModelScope.launch {
+            dataStore.setActiveTreeId(treeId)
+            // Also keep treeStyle string in sync for legacy compatibility
+            val styleKey = when (treeId) {
+                "tree_love" -> "LOVE"
+                "tree_sakura" -> "SAKURA"
+                "tree_golden" -> "GOLDEN"
+                "tree_autumn" -> "AUTUMN"
+                "tree_moonlight" -> "MOONLIGHT"
+                "tree_mystic" -> "MYSTIC"
+                "tree_blossom" -> "BLOSSOM"
+                "tree_spirit" -> "SPIRIT"
+                else -> "PINE"
+            }
+            dataStore.setTreeStyle(styleKey)
+        }
+    }
+
+    fun redeemUnlockCode(
+        rawCode: String,
+        onResult: (com.example.domain.tree.CodeRedemptionResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = unlockCodeService.redeemCode(rawCode)
+            if (result is com.example.domain.tree.CodeRedemptionResult.Success) {
+                // Persist new unlocked tree in local storage
+                dataStore.addOwnedTree(result.treeId)
+            }
+            onResult(result)
         }
     }
 }

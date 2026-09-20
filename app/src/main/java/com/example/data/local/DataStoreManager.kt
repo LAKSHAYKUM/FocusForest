@@ -30,6 +30,8 @@ class DataStoreManager(private val context: Context) {
         val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val KEY_STRICT_LOCK_ENABLED = booleanPreferencesKey("strict_lock_enabled")
         val KEY_DEBUG_DIAGNOSTICS_ENABLED = booleanPreferencesKey("debug_diagnostics_enabled")
+        val KEY_OWNED_TREES = androidx.datastore.preferences.core.stringSetPreferencesKey("owned_trees")
+        val KEY_ACTIVE_TREE_ID = stringPreferencesKey("active_tree_id")
     }
 
     val defaultDurationMinutes: Flow<Int> = context.dataStore.data.map { it[KEY_DEFAULT_DURATION] ?: 25 }
@@ -46,6 +48,8 @@ class DataStoreManager(private val context: Context) {
     val onboardingCompleted: Flow<Boolean> = context.dataStore.data.map { it[KEY_ONBOARDING_COMPLETED] ?: false }
     val strictLockEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_STRICT_LOCK_ENABLED] ?: false }
     val debugDiagnosticsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_DEBUG_DIAGNOSTICS_ENABLED] ?: false }
+    val ownedTrees: Flow<Set<String>> = context.dataStore.data.map { it[KEY_OWNED_TREES] ?: setOf("tree_default") }
+    val activeTreeId: Flow<String> = context.dataStore.data.map { it[KEY_ACTIVE_TREE_ID] ?: "tree_default" }
 
     suspend fun setDefaultDuration(minutes: Int) {
         context.dataStore.edit { it[KEY_DEFAULT_DURATION] = minutes }
@@ -101,5 +105,18 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun setDebugDiagnosticsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_DEBUG_DIAGNOSTICS_ENABLED] = enabled }
+    }
+
+    suspend fun addOwnedTree(treeId: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_OWNED_TREES] ?: setOf("tree_default")
+            prefs[KEY_OWNED_TREES] = current + treeId
+        }
+    }
+
+    suspend fun setActiveTreeId(treeId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_ACTIVE_TREE_ID] = treeId
+        }
     }
 }

@@ -237,7 +237,14 @@ fun StatsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            com.example.presentation.ads.InlineBannerAd(
+                viewModel = viewModel,
+                placement = com.example.ads.AdPlacement.STATS_INLINE
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
         // Achievements Section

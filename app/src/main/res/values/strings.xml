@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">FocusForest</string>
+    <string name="default_web_client_id">386383988361-4lug1qumov5rmb3p0kvv1oi1ujdeomnd.apps.googleusercontent.com</string>
+    <!-- AdMob App ID -->
+    <string name="admob_app_id">ca-app-pub-9576035225797145~8747360267</string>
+    <!-- AdMob Banner Ad Unit ID -->
+    <string name="admob_banner_ad_unit_id">ca-app-pub-9576035225797145/3396629539</string>
+    <string name="admob_banner_test_unit_id">ca-app-pub-9576035225797145/3396629539</string>
 </resources>

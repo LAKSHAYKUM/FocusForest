@@ -45,12 +45,20 @@ class FocusForestApp : Application() {
     lateinit var soundManager: com.example.audio.SoundFeedbackManager
         private set
 
+    lateinit var authManager: com.example.auth.FirebaseAuthManager
+        private set
+
+    lateinit var adManager: com.example.ads.AdMobManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         database = FocusForestDatabase.getInstance(this)
         repository = FocusRepositoryImpl(database.focusDao())
         dataStoreManager = DataStoreManager(this)
 
+        authManager = com.example.auth.FirebaseAuthManager(this)
+        adManager = com.example.ads.AdMobManager(this, appScope)
         sensorManager = OrientationSensorManager(this)
         cameraManager = PlacementCameraManager(this)
         movementManager = MovementDetectionManager(this, sensorManager, cameraManager, appScope)

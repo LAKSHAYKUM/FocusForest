@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
@@ -44,13 +45,64 @@ class SoundFeedbackManager(
         } catch (_: Exception) {}
     }
 
+    /**
+     * Synthesizes a delicate, calm nature-based acoustic chime chord
+     * (E major: E5, G#5, B5, E6) with gentle exponential decay,
+     * fulfilling the calm forest ambiance requirement without external audio assets.
+     */
     fun playCompletionChime(enabled: Boolean) {
         if (!enabled) return
-        try {
-            scope.launch(Dispatchers.Default) {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 350)
+        scope.launch(Dispatchers.Default) {
+            try {
+                val sampleRate = 22050
+                val durationSec = 1.4f
+                val numSamples = (sampleRate * durationSec).toInt()
+                val buffer = ShortArray(numSamples)
+                val freqs = floatArrayOf(659.25f, 830.61f, 987.77f, 1318.51f) // E5, G#5, B5, E6
+                val amplitudes = floatArrayOf(0.28f, 0.22f, 0.18f, 0.14f)
+
+                for (i in 0 until numSamples) {
+                    val t = i.toFloat() / sampleRate
+                    val envelope = Math.exp((-2.8 * t)).toFloat() // Smooth exponential fade-out
+                    var sampleVal = 0f
+                    for (f in freqs.indices) {
+                        sampleVal += sin(2.0 * Math.PI * freqs[f] * t).toFloat() * amplitudes[f]
+                    }
+                    val finalSample = (sampleVal * envelope * 32767f).toInt().coerceIn(-32768, 32767)
+                    buffer[i] = finalSample.toShort()
+                }
+
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+
+                val audioFormat = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .build()
+
+                val track = AudioTrack(
+                    audioAttributes,
+                    audioFormat,
+                    buffer.size * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, buffer.size)
+                track.play()
+                // Auto release after sound finishes
+                kotlinx.coroutines.delay(1600L)
+                track.stop()
+                track.release()
+            } catch (_: Exception) {
+                // Fallback to ToneGenerator if audio track cannot be allocated
+                try {
+                    toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 350)
+                } catch (_: Exception) {}
             }
-        } catch (_: Exception) {}
+        }
     }
 
     fun startAmbientSound(enabled: Boolean) {
