@@ -19,40 +19,65 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Verify project structure
+      - name: Find Android Project and Module
+        id: find-project
         run: |
-          if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
-            echo "Error: Android project root not found."
-            exit 1
-          fi
-          if [ ! -d "app" ]; then
-            echo "Error: Application module 'app' not found."
-            exit 1
-          fi
-          if [ ! -f "gradlew" ]; then
+          echo "Searching for Android project root..."
+          GRADLEW_PATH=$(find . -name "gradlew" -type f | head -n 1)
+          if [ -z "$GRADLEW_PATH" ]; then
             echo "Error: Gradle wrapper 'gradlew' not found."
             exit 1
           fi
+          PROJECT_ROOT=$(dirname "$GRADLEW_PATH")
+          echo "Project root detected at: $PROJECT_ROOT"
+
+          if [ ! -f "$PROJECT_ROOT/build.gradle.kts" ] && [ ! -f "$PROJECT_ROOT/build.gradle" ] && [ ! -f "$PROJECT_ROOT/settings.gradle.kts" ] && [ ! -f "$PROJECT_ROOT/settings.gradle" ]; then
+            echo "Error: Android project root build files not found at $PROJECT_ROOT."
+            exit 1
+          fi
+
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> $GITHUB_ENV
+
+          echo "Searching for application module..."
+          APP_BUILD_GRADLE=$(grep -rl "com\.android\.application" "$PROJECT_ROOT" --include="build.gradle*" | head -n 1)
+          if [ -n "$APP_BUILD_GRADLE" ]; then
+            APP_DIR=$(dirname "$APP_BUILD_GRADLE")
+          else
+            if [ -d "$PROJECT_ROOT/app" ]; then
+              APP_DIR="$PROJECT_ROOT/app"
+            else
+              echo "Error: Application module not found."
+              exit 1
+            fi
+          fi
+          APP_MODULE=$(basename "$APP_DIR")
+          echo "Application module detected as: $APP_MODULE"
+          echo "APP_MODULE=$APP_MODULE" >> $GITHUB_ENV
 
       - name: Generate debug keystore
+        working-directory: ${{ env.PROJECT_ROOT }}
         run: |
-          # app/build.gradle.kts requires debug.keystore at rootDir
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
       - name: Clear caches
+        working-directory: ${{ env.PROJECT_ROOT }}
         run: |
           rm -rf .gradle
-          rm -rf app/build
+          rm -rf ${{ env.APP_MODULE }}/build
 
       - name: Make Gradle wrapper executable
+        working-directory: ${{ env.PROJECT_ROOT }}
         run: chmod +x gradlew
 
       - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_ROOT }}
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-app-debug-apk
-          path: app/build/outputs/apk/debug/**/*.apk
+          path: ${{ env.PROJECT_ROOT }}/${{ env.APP_MODULE }}/build/outputs/apk/debug/**/*.apk
           if-no-files-found: error
